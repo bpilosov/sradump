@@ -1,0 +1,1 @@
+"strategy rna seq"[Properties] AND Homo sapiens[Organism] 
