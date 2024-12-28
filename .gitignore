@@ -1,3 +1,4 @@
 *.sra
 *.sralite
 *.log
+__pycache__
