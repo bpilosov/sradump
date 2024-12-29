@@ -33,8 +33,12 @@ async def prefetch_command(ctx, srr_id):
     except subprocess.CalledProcessError as e:
         return {"status": "ERROR", "error": e.stderr}
 
+# async def log(ctx):
+    # TODO log (srr_id, status) to second redis server
+
 class WorkerSettings:
     """Worker configuration."""
     functions = [prefetch_command]
     redis_settings = RedisSettings()
-
+    keep_result_forever = True
+    # after_job_end = log
