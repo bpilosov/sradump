@@ -30,9 +30,9 @@ def run_command(srr_id):
     command = CMD.format(srr_id)
     try:
         result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-        return "SUCCESS", f"SRR{srr_id}{result.stdout}"
+        return "SUCCESS", f"{srr_id}{result.stdout}"
     except subprocess.CalledProcessError as e:
-        return "ERROR", f"SRR{srr_id}{e.stderr}"
+        return "ERROR", f"{srr_id}{e.stderr}"
 
 def recreate_queue():
     with open(MASTER_LIST, "r") as master, open(SUCCESS_LOG, "r") as successlog, open(INPUT_FILE, "w") as queue:
