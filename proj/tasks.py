@@ -1,29 +1,32 @@
-import subprocess
 from celery import Celery
+import subprocess
 
-app = Celery('proj', backend='redis://localhost:6380/0', 
-             broker='redis://localhost:6379/0', include=['tasks'])
-# keep results in backend, spawn 32 procs
-app.conf.update(result_expires=0, worker_concurrency=10)
-app.conf.update(broker_connection_retry_on_startup=True)
-# app.conf.update(task_ignore_result=True, task_store_errors_even_if_ignored=True)
+# setup celery with redis as broker
+app = Celery('prefetch_tasks', 
+             broker='redis://localhost:6379/0',
+             backend='redis://localhost:6380/0')
 
-# if __name__ == '__main__':
-#     app.start()
+# configure celery
+app.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='UTC',
+    enable_utc=True,
+)
 
-# -L log errors, -X maximum file size u=unlimited, -O output directory
-CMD = "prefetch -E -L 3 -X u -O /mnt/mycephfs/sradownloads SRR{0}"
-@app.task
-def srrDownload(srrindex):
-    cmd = CMD.format(srrindex)
-    res = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-    return (srrindex, res.returncode, res.stdout, res.stderr)
+PREFETCH_CMD = "prefetch -X u -O ./tmp/sra SRR{0}"
 
-
-
-TEST_CMD = f"echo {0} >> ./test/celery_test.txt"
-@app.task
-def testDownload(index):
-    cmd = TEST_CMD.format(index)
-    res = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-    return (index, res.returncode, res.stdout, res.stderr)
+@app.task(bind=True, retry_backoff=True, max_retries=3)
+def run_prefetch_command(self, srr_id):
+    """task that runs prefetch cmd for an srr id"""
+    command = PREFETCH_CMD.format(srr_id)
+    try:
+        result = subprocess.run(
+            command, shell=True, check=True, capture_output=True, text=True
+        )
+        return "SUCCESS", f"{srr_id}{result.stdout}"
+    except subprocess.CalledProcessError as e:
+        # retry mechanism built in
+        self.retry(exc=e)
+        return "ERROR", f"{srr_id}{e.stderr}"
