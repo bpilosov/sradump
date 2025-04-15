@@ -2,3 +2,5 @@
 *.sralite
 *.log
 __pycache__
+.venv
+*.fastq
