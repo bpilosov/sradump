@@ -17,3 +17,8 @@ update queue DONE
 multiple workers
 multiple hosts
 
+source ./.venv/bin/activate
+usage: 
+python3 enqueue.py
+new terminal:
+celery -A tasks worker --loglevel=info
