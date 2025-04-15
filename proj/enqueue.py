@@ -1,4 +1,5 @@
 from typing import List
+import time
 from tasks import run_prefetch_command
 from celery.result import AsyncResult
 
@@ -10,25 +11,46 @@ def distributed_prefetch(srr_ids: List[str]):
     # start tasks and get task ids
     task_results = [run_prefetch_command.delay(srr_id) for srr_id in srr_ids]
     
-    # track tasks to completion
-    with (
-        open(PREFETCH_SUCCESS_LOG, "w", buffering=1) as success_log,
-        open(PREFETCH_ERROR_LOG, "w") as error_log,
-    ):
-        for task in task_results:
-            # wait for the task to complete
-            status, message = task.get()  # blocks until task completes
-            if status == "SUCCESS":
-                success_log.write(message)
-            else:
-                error_log.write(message)
+    # monitor task completion and log results
+    pending_tasks = {result.id: (result, srr_id) for result, srr_id in zip(task_results, srr_ids)}
+    
+    while pending_tasks:
+        for task_id, (task, srr_id) in list(pending_tasks.items()):
+            if task.ready():
+                # task completed, remove from pending
+                pending_tasks.pop(task_id)
+                
+                # get result and log it
+                try:
+                    # get the task result values
+                    status, message = task.get()
+                    # format date for logging
+                    date_done = task.date_done.isoformat() if task.date_done else "unknown"
+                    
+                    # log based on status
+                    if status == "SUCCESS":
+                        log_result(PREFETCH_SUCCESS_LOG, f"SRR{srr_id} {message} Date:{date_done}")
+                    else:
+                        log_result(PREFETCH_ERROR_LOG, f"SRR{srr_id} {message} Date:{date_done}")
+                except Exception as e:
+                    # unexpected error in task
+                    log_result(PREFETCH_ERROR_LOG, f"SRR{srr_id} Exception: {str(e)}")
+        
+        # avoid hammering the system with checks
+        if pending_tasks:
+            time.sleep(1)
+
+def log_result(logfile: str, message: str):
+    """append a message to the specified log file"""
+    with open(logfile, "a") as f:
+        f.write(f"{message}\n")
 
 def main():
     INPUT_FILE = "./records/test.csv"
     # read srr ids
     with open(INPUT_FILE, "r") as file:
         srr_ids = [line.strip() for line in file if line.strip()]
-
+    
     to_prefetch = filter_completed_ids(srr_ids, "prefetch")
     if to_prefetch:
         print(f"Starting prefetch for {len(to_prefetch)} files...")

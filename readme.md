@@ -11,8 +11,8 @@ queue.csv - subset of missingSRR. must be updated
 todo:
 set up celery worker DONE
 test with 10 in queue DONE
-extract successes..? enqueue inf blocking, not writing to log BROKEN
-update queue TODO
+extract successes DONE
+update queue DONE
 
 multiple workers
 multiple hosts
