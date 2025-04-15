@@ -1,21 +1,26 @@
-import multiprocessing as mp
 import subprocess
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
+import argparse
+import sys
+from typing import List
+
 
 # -X maximum file size, u=unlimited -O output directory
-CMD = "prefetch -X u -O /mnt/mycephfs/sradownloads SRR{0}"
+PREFETCH_CMD = "prefetch -X u -O /mnt/mycephfs/sradownloads SRR{0}"
 MAX_WORKERS = 18
-SUCCESS_LOG = "/mnt/mycephfs/sradownloads/success.log"
-ERROR_LOG = "/mnt/mycephfs/sradownloads/error.log"
-INPUT_FILE = "/mnt/mycephfs/sradownloads/queue.csv"
-MASTER_LIST = "/mnt/mycephfs/sradownloads/missingSRR.csv"
+PROJECT_DIR = "/home/ubuntu/script"
+SUCCESS_LOG = f"{PROJECT_DIR}/sradump/proj/records/success.log"
+ERROR_LOG = f"{PROJECT_DIR}/sradump/proj/records/error.log"
+INPUT_FILE = f"{PROJECT_DIR}/sradump/proj/records/queue.csv"
+MASTER_LIST = f"{PROJECT_DIR}/sradump/proj/records/missingSRR.csv"
 
-def parallel_prefetch(srr_ids):
+
+def parallel_prefetch(srr_ids: List[int]):
     """Execute commands in parallel using ThreadPoolExecutor."""
     with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
         # Submit tasks to the executor
-        futures = {executor.submit(run_command, srr_id): srr_id for srr_id in srr_ids}
+        futures = {executor.submit(run_prefetch_command, srr_id): srr_id for srr_id in srr_ids}
         
         with open(SUCCESS_LOG, "a", buffering=1) as success_log, open(ERROR_LOG, "w") as error_log:
             for future in as_completed(futures):
@@ -25,24 +30,56 @@ def parallel_prefetch(srr_ids):
                 else:
                     error_log.write(message)
 
-def run_command(srr_id):
+
+def parallel_sratofastq(srr_ids: List[int]):
+    with open(INPUT_FILE, "r") as queue:
+        pass
+
+
+def parallel_fastqtosqueakr(srr_ids: List[int]):
+    with open(INPUT_FILE, "r") as queue:
+        pass
+
+
+def run_prefetch_command(srr_id):
     """Format and execute the prefetch command for a given SRR ID."""
-    command = CMD.format(srr_id)
+    command = PREFETCH_CMD.format(srr_id)
     try:
         result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
         return "SUCCESS", f"{srr_id}{result.stdout}"
     except subprocess.CalledProcessError as e:
         return "ERROR", f"{srr_id}{e.stderr}"
 
-def recreate_queue():
+def recreate_queue(limit: int):
     with open(MASTER_LIST, "r") as master, open(SUCCESS_LOG, "r") as successlog, open(INPUT_FILE, "w") as queue:
-        missing = [line for line in master if line not in successlog]
+        missing = [line for line in master if line not in successlog][:limit]
         queue.write("".join(missing))
         print(f"Queue Restored, {len(missing)} records to be downloaded...")
 
 def main():
+    # Sanitizing arguments first.
+    parser = argparse.ArgumentParser(
+        description="A program to help download sra files and follow a process to conver them to .squeakr format via a worker pool."
+    )
+    parser.add_argument("-n", "--num", type=int, default=100_000, help="The number of sra files to download and convert. Defaults to 100,000.")
+    
+    args = None
+    try:
+        args = parser.parse_args()
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except argparse.ArgumentError as e:
+        print(f"Argument Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    
+    # Recreate queue first
     start = time.perf_counter()
-    recreate_queue()
+    recreate_queue(limit=args.num)
 
     # Read SRR IDs from the input file
     with open(INPUT_FILE, 'r') as file:
